@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
+import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
@@ -17,36 +18,53 @@ import io.flutter.plugin.common.PluginRegistry.Registrar
 import java.io.File
 import java.io.FileNotFoundException
 
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
+import io.flutter.plugin.common.BinaryMessenger
+
+
+
+
+
+
+
 /**
  * 1 获取Registrar 这个接口可以获取 context
  * 2 添加自身所需依赖
  * @property registrar Registrar
  * @constructor
  */
-class InstallPluginCustomPlugin(private val registrar: Registrar) : MethodCallHandler {
+class InstallPluginCustomPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
   private var apkFile: File? = null
   private var appId: String? = null
+
+  private var applicationContext: Context? = null
+  private var activity: Activity? = null
+  private var methodChannel: MethodChannel? = null
 
   companion object {
     private const val installRequestCode = 1234
 
     @JvmStatic
     fun registerWith(registrar: Registrar): Unit {
-      val channel = MethodChannel(registrar.messenger(), "install_plugin_custom")
-      val installPlugin = InstallPluginCustomPlugin(registrar)
-      channel.setMethodCallHandler(installPlugin)
-      registrar.addActivityResultListener { requestCode, resultCode, intent ->
-        Log.d(
-                "ActivityResultListener",
-                "requestCode=$requestCode, resultCode = $resultCode, intent = $intent"
-        )
-        if (resultCode == Activity.RESULT_OK && requestCode == installRequestCode) {
-          installPlugin.install24(registrar.context(), installPlugin.apkFile, installPlugin.appId)
-          true
-        } else
+//      val channel = MethodChannel(registrar.messenger(), "install_plugin_custom")
+//      val installPlugin = InstallPluginCustomPlugin(registrar)
+//      channel.setMethodCallHandler(installPlugin)
 
-          false
-      }
+      val instance = InstallPluginCustomPlugin()
+      instance.onAttachedToEngine(registrar.context(), registrar.messenger())
+//      registrar.addActivityResultListener { requestCode, resultCode, intent ->
+//        Log.d(
+//                "ActivityResultListener",
+//                "requestCode=$requestCode, resultCode = $resultCode, intent = $intent"
+//        )
+//        if (resultCode == Activity.RESULT_OK && requestCode == installRequestCode) {
+//          installPlugin.install24(registrar.context(), installPlugin.apkFile, installPlugin.appId)
+//          true
+//        } else
+//
+//          false
+//      }
     }
   }
 
@@ -73,7 +91,7 @@ class InstallPluginCustomPlugin(private val registrar: Registrar) : MethodCallHa
   private fun installApk(filePath: String?, appId: String?) {
     if (filePath == null) throw NullPointerException("fillPath is null!")
     val activity: Activity =
-            registrar.activity() ?: throw NullPointerException("context is null!")
+            activity ?: throw NullPointerException("context is null!")
 
     val file = File(filePath)
     if (!file.exists()) throw FileNotFoundException("$filePath is not exist! or check permission")
@@ -131,5 +149,37 @@ class InstallPluginCustomPlugin(private val registrar: Registrar) : MethodCallHa
     val uri: Uri = FileProvider.getUriForFile(context, "$appId.fileprovider", file)
     intent.setDataAndType(uri, "application/vnd.android.package-archive")
     context.startActivity(intent)
+  }
+
+  override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    onAttachedToEngine(binding.applicationContext, binding.binaryMessenger);
+  }
+
+  private fun onAttachedToEngine(applicationContext: Context, messenger: BinaryMessenger) {
+    this.applicationContext = applicationContext
+    methodChannel = MethodChannel(messenger, "install_plugin_custom")
+    methodChannel?.setMethodCallHandler(this)
+  }
+
+  override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    applicationContext = null;
+    methodChannel?.setMethodCallHandler(null);
+    methodChannel = null;
+  }
+
+  override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+    this.activity = binding.activity
+  }
+
+  override fun onDetachedFromActivityForConfigChanges() {
+
+  }
+
+  override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+
+  }
+
+  override fun onDetachedFromActivity() {
+    this.activity = null
   }
 }
